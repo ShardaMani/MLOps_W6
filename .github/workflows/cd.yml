@@ -1,1 +1,70 @@
+name: CD - Build, Push and Deploy to GKE
+
+on:
+  push:
+    branches: ["main"]
+  pull_request:
+    branches: ["main"]
+  workflow_dispatch: {}
+
+env:
+  PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
+  ARTIFACT_REGION: ${{ secrets.ARTIFACT_REGION }}
+  ARTIFACT_REPO: ${{ secrets.ARTIFACT_REPO }}
+  GKE_CLUSTER: ${{ secrets.GKE_CLUSTER }}
+  GKE_LOCATION: ${{ secrets.GKE_LOCATION }}
+  NAMESPACE: ${{ secrets.K8S_NAMESPACE || 'default' }}
+
+  # your deployment/container names in GKE:
+  DEPLOYMENT_NAME: deployment-1
+  CONTAINER_NAME: iris-api-sha256-1
+
+  # your image in Artifact Registry:
+  IMAGE_URI: ${{ secrets.ARTIFACT_REGION }}-docker.pkg.dev/${{ secrets.GCP_PROJECT_ID }}/${{ secrets.ARTIFACT_REPO }}/iris-api
+  IMAGE_TAG: ${{ github.sha }}
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/setup-gcloud@v2
+        with:
+          project_id: ${{ env.PROJECT_ID }}
+          service_account_key: ${{ secrets.GCP_SA_KEY }}
+          export_default_credentials: true
+
+      - name: Configure Docker for Artifact Registry
+        run: gcloud auth configure-docker ${{ env.ARTIFACT_REGION }}-docker.pkg.dev --quiet
+
+      - name: Build Docker image
+        run: |
+          docker build -t $IMAGE_URI:$IMAGE_TAG -t $IMAGE_URI:latest .
+
+      - name: Push Docker image
+        run: |
+          docker push $IMAGE_URI:$IMAGE_TAG
+          docker push $IMAGE_URI:latest
+
+      - name: Get GKE credentials
+        uses: google-github-actions/get-gke-credentials@v2
+        with:
+          cluster_name: ${{ env.GKE_CLUSTER }}
+          location: ${{ env.GKE_LOCATION }}
+          project_id: ${{ env.PROJECT_ID }}
+
+      # Option A: just update the image on your existing deployment
+      - name: Deploy by updating image
+        run: |
+          kubectl -n $NAMESPACE set image deployment/$DEPLOYMENT_NAME $CONTAINER_NAME=$IMAGE_URI:$IMAGE_TAG
+          kubectl -n $NAMESPACE rollout status deployment/$DEPLOYMENT_NAME --timeout=180s
+
+      # Option B: (optional) apply manifests if you want to manage all resources declaratively
+      # - name: Apply K8s manifests
+      #   run: |
+      #     kubectl -n $NAMESPACE apply -f k8s/
 
