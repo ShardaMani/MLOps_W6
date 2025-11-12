@@ -20,7 +20,7 @@ env:
   # ====== week7 image name and K8s object names ======
   IMAGE_NAME: demo_log                                      # will push .../<repo>/demo_log
   DEPLOYMENT_NAME: demo-log-ml-service                      # must match metadata.name in week7/deployment.yaml
-  CONTAINER_NAME: fastapi                                   # must match containers[0].name in deployment
+  CONTAINER_NAME: fastapi-container                                   # must match containers[0].name in deployment
 
   # derived
   IMAGE_URI: ${{ secrets.ARTIFACT_REGION }}-docker.pkg.dev/${{ secrets.GCP_PROJECT_ID }}/${{ secrets.ARTIFACT_REPO }}/${{ env.IMAGE_NAME }}
